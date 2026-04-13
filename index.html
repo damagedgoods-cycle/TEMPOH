@@ -4,6 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TEMPO — Precision Metronome</title>
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0d0d0f">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="TEMPO">
+<link rel="apple-touch-icon" href="icon-192.png">
+
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Bebas+Neue&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -124,7 +134,7 @@
     border-radius: 50%;
     background: var(--accent);
     position: absolute;
-    transition: transform 0.12s cubic-bezier(0.4,0,0.2,1);
+    transition: background 0.08s ease;
     box-shadow: 0 0 20px var(--accent), 0 0 48px rgba(240,192,64,0.35);
   }
 
@@ -667,6 +677,126 @@
     border-color: var(--accent);
   }
 
+  /* ── PRESETS ────────────────────────────────── */
+  .presets-panel { grid-column: 1 / -1; }
+
+  .presets-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+  }
+
+  @media (max-width: 560px) {
+    .presets-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  .preset-slot {
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface2);
+    padding: 10px 10px 8px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, transform 0.08s;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    position: relative;
+    min-height: 80px;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .preset-slot:hover { border-color: var(--muted); }
+
+  .preset-slot.filled { border-color: var(--border); }
+  .preset-slot.filled:hover { border-color: var(--accent); background: rgba(240,192,64,0.06); }
+
+  .preset-slot.saving {
+    border-color: var(--accent) !important;
+    background: rgba(240,192,64,0.15) !important;
+    transform: scale(0.97);
+  }
+
+  .preset-slot.active-preset { border-color: var(--accent); }
+
+  .preset-slot-num {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 0.2em;
+  }
+
+  .preset-slot-name {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: text;
+    border: none;
+    background: transparent;
+    width: 100%;
+    padding: 0;
+    outline: none;
+  }
+
+  .preset-slot-name::placeholder { color: var(--border); }
+  .preset-slot-name:focus { color: var(--accent); }
+
+  .preset-slot-meta {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+    line-height: 1.4;
+  }
+
+  .preset-slot-empty {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    color: var(--border);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-top: auto;
+    margin-bottom: auto;
+    text-align: center;
+  }
+
+  .preset-slot-actions {
+    display: flex;
+    gap: 4px;
+    margin-top: 2px;
+  }
+
+  .preset-action-btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    padding: 3px 6px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.1s;
+    letter-spacing: 0.05em;
+  }
+
+  .preset-action-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+  .preset-action-btn.save-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Hold-to-save progress ring on the slot number */
+  .preset-hold-ring {
+    position: absolute;
+    top: 6px; right: 6px;
+    width: 18px; height: 18px;
+    opacity: 0;
+    transition: opacity 0.1s;
+  }
+
+  .preset-slot:active .preset-hold-ring,
+  .preset-slot.holding .preset-hold-ring { opacity: 1; }
+
   /* Flash overlay */
   #flash {
     position: fixed;
@@ -1132,6 +1262,14 @@
       </div>
     </div>
   </div>
+  <!-- MY PRESETS -->
+  <div class="panel presets-panel">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:10px;border-bottom:1px solid var(--border);margin-bottom:4px">
+      <div class="panel-title" style="border:none;padding:0;margin:0">My Presets</div>
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:0.15em">HOLD TO SAVE · TAP TO LOAD</div>
+    </div>
+    <div class="presets-grid" id="presetsGrid"></div>
+  </div>
 
 </div>
 </div>
@@ -1158,6 +1296,10 @@ let rampBarCounter = 0;  // bars since last ramp trigger
 let rampTotalBars = 0;   // total bars played
 let rampDoneCount = 0;   // how many ramps applied so far
 let rampStartBpm = 120;  // BPM when play was pressed
+
+// ─── VISUAL QUEUE (RAF-driven, audio-clock synced) ───────────
+let visualQueue = [];  // [{time, beat, isMain, accentState, ...}]
+let rafHandle = null;
 
 // ─── AUDIO CTX ───────────────────────────────────────────────
 // iOS mute-switch fix:
@@ -1271,6 +1413,28 @@ function playSound(time, type, vol = 1) {
   }
 }
 
+// ─── RAF VISUAL LOOP ─────────────────────────────────────────
+// Runs at 60fps. Checks the audio clock and fires visuals at
+// exactly the right moment — no setTimeout jitter.
+function rafLoop() {
+  if (!isPlaying || !audioCtx) { rafHandle = null; return; }
+  const now = audioCtx.currentTime;
+  while (visualQueue.length && visualQueue[0].time <= now) {
+    const ev = visualQueue.shift();
+    if (ev.rampBpm !== undefined) {
+      setBPM(ev.rampBpm, true);
+      const el = document.getElementById('bpmDisplay');
+      el.style.color = 'var(--accent)';
+      setTimeout(() => el.style.color = '', 300);
+    } else if (ev.rampUiUpdate) {
+      updateRampUI();
+    } else {
+      flashVisual(ev.beat, ev.isMain, ev.accentState);
+    }
+  }
+  rafHandle = requestAnimationFrame(rafLoop);
+}
+
 // ─── SCHEDULER ───────────────────────────────────────────────
 function scheduleNote(time) {
   const isFirstOfBar = subCount === 0 && currentBeat === 0;
@@ -1298,10 +1462,11 @@ function scheduleNote(time) {
 
   if (type !== 'mute') playSound(time, type, vol);
 
-  // Schedule visual via AudioContext time
-  const accentStateForViz = isMainBeat ? (()=>{ const p=document.querySelectorAll('.beat-pad')[currentBeat]; return p?parseInt(p.dataset.accent):0; })() : -1;
-  const delay = (time - audioCtx.currentTime) * 1000;
-  setTimeout(() => flashVisual(currentBeat, isMainBeat, accentStateForViz), Math.max(0, delay));
+  // Push to visual queue — RAF loop will fire it at exactly the right audio time
+  const accentStateForViz = isMainBeat
+    ? (()=>{ const p = document.querySelectorAll('.beat-pad')[currentBeat]; return p ? parseInt(p.dataset.accent) : 0; })()
+    : -1;
+  visualQueue.push({ time, beat: currentBeat, isMain: isMainBeat, accentState: accentStateForViz });
 
   // Advance
   const swing = parseFloat(document.getElementById('swingSlider').value) / 100;
@@ -1324,9 +1489,8 @@ function scheduleNote(time) {
     if (currentBeat === 0) {
       rampBarCounter++;
       rampTotalBars++;
-      // Schedule the ramp UI update visually in sync
-      const delay2 = (time - audioCtx.currentTime) * 1000;
-      setTimeout(updateRampUI, Math.max(0, delay2));
+      // Push ramp UI update to visual queue
+      visualQueue.push({ time, beat: -1, isMain: false, accentState: -1, rampUiUpdate: true });
       // Fire ramp?
       const rampEvery = parseInt(document.getElementById('rampBars').value);
       const rampStep  = parseInt(document.getElementById('rampStep').value);
@@ -1335,14 +1499,7 @@ function scheduleNote(time) {
         rampBarCounter = 0;
         rampDoneCount++;
         const newBpm = Math.min(bpm + rampStep, rampMax);
-        // Schedule BPM change on the UI thread in sync with audio
-        setTimeout(() => {
-          setBPM(newBpm, true);  // silent = don't restart scheduler
-          // flash the BPM number
-          const el = document.getElementById('bpmDisplay');
-          el.style.color = 'var(--accent)';
-          setTimeout(() => el.style.color = '', 300);
-        }, Math.max(0, delay2));
+        visualQueue.push({ time, beat: -1, isMain: false, accentState: -1, rampBpm: newBpm });
       }
     }
   }
@@ -1403,8 +1560,10 @@ function startMetronome() {
     rampTotalBars = 0;
     rampDoneCount = 0;
     rampStartBpm = bpm;
+    visualQueue = [];
     nextNoteTime = ctx.currentTime + 0.05;
     schedulerTimer = setInterval(scheduler, LOOKAHEAD);
+    rafHandle = requestAnimationFrame(rafLoop);
     document.getElementById('playBtn').textContent = '■ STOP';
     document.getElementById('playBtn').style.background = 'var(--accent2)';
     document.getElementById('playBtn').style.borderColor = 'var(--accent2)';
@@ -1420,6 +1579,8 @@ function startMetronome() {
 function stopMetronome() {
   isPlaying = false;
   clearInterval(schedulerTimer);
+  if (rafHandle) { cancelAnimationFrame(rafHandle); rafHandle = null; }
+  visualQueue = [];
   currentBeat = 0;
   subCount = 0;
   rampBarCounter = 0;
@@ -1760,11 +1921,233 @@ function initSettings() {
   buildSwatches('surfaceSwatches', SURFACE_SWATCHES, '--surface', '--surface2');
 }
 
-// ─── INIT ────────────────────────────────────────────────────
+// ─── PRESETS ─────────────────────────────────────────────────
+const NUM_PRESETS = 10;
+const PRESET_KEY = 'tempo_presets_v1';
+let presets = loadPresets();
+let activePresetIdx = -1;
+const HOLD_MS = 800;
+
+function loadPresets() {
+  try {
+    const raw = localStorage.getItem(PRESET_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch(e) {}
+  return Array(NUM_PRESETS).fill(null);
+}
+
+function savePresetsToStorage() {
+  try { localStorage.setItem(PRESET_KEY, JSON.stringify(presets)); } catch(e) {}
+}
+
+function captureState() {
+  const pads = [...document.querySelectorAll('.beat-pad')].map(p => parseInt(p.dataset.accent));
+  return {
+    bpm, timeSigNum, timeSigDen, subdivision,
+    sound: document.getElementById('soundSelect').value,
+    volume: document.getElementById('volSlider').value,
+    accentPitch: document.getElementById('accentPitchSlider').value,
+    beatPitch: document.getElementById('beatPitchSlider').value,
+    subPitch: document.getElementById('subPitchSlider').value,
+    swing: document.getElementById('swingSlider').value,
+    rampOn,
+    rampBars: document.getElementById('rampBars').value,
+    rampStep: document.getElementById('rampStep').value,
+    rampMax: document.getElementById('rampMax').value,
+    padAccents: pads,
+  };
+}
+
+function applyPresetState(s) {
+  setBPM(s.bpm, true);
+  timeSigNum = s.timeSigNum;
+  timeSigDen = s.timeSigDen;
+  subdivision = s.subdivision;
+
+  document.querySelectorAll('.time-sig-btn').forEach(b =>
+    b.classList.toggle('active', parseInt(b.dataset.num) === s.timeSigNum && parseInt(b.dataset.den) === s.timeSigDen));
+  document.querySelectorAll('.sub-btn').forEach(b =>
+    b.classList.toggle('active', parseInt(b.dataset.sub) === s.subdivision));
+
+  document.getElementById('soundSelect').value = s.sound;
+
+  document.getElementById('volSlider').value = s.volume;
+  document.getElementById('volVal').textContent = s.volume + '%';
+  document.getElementById('accentPitchSlider').value = s.accentPitch;
+  document.getElementById('accentPitchVal').textContent = s.accentPitch + ' Hz';
+  document.getElementById('beatPitchSlider').value = s.beatPitch;
+  document.getElementById('beatPitchVal').textContent = s.beatPitch + ' Hz';
+  document.getElementById('subPitchSlider').value = s.subPitch;
+  document.getElementById('subPitchVal').textContent = s.subPitch + ' Hz';
+  document.getElementById('swingSlider').value = s.swing;
+  document.getElementById('swingVal').textContent = s.swing + '%';
+
+  if (s.rampOn !== undefined) {
+    rampOn = s.rampOn;
+    document.getElementById('rampEnabled').checked = rampOn;
+    const ctrl = document.getElementById('rampControls');
+    ctrl.style.opacity = rampOn ? '1' : '0.35';
+    ctrl.style.pointerEvents = rampOn ? 'all' : 'none';
+    document.querySelector('.ramp-panel').classList.toggle('active-ramp', rampOn);
+  }
+  if (s.rampBars) document.getElementById('rampBars').value = s.rampBars;
+  if (s.rampStep) document.getElementById('rampStep').value = s.rampStep;
+  if (s.rampMax)  document.getElementById('rampMax').value  = s.rampMax;
+
+  buildBeatPads();
+  if (s.padAccents) {
+    const pads = document.querySelectorAll('.beat-pad');
+    s.padAccents.forEach((acc, i) => { if (pads[i]) pads[i].dataset.accent = acc; });
+  }
+  updateInfoBar();
+  restartIfPlaying();
+}
+
+function presetMeta(s) {
+  if (!s) return '';
+  const subLabels = {1:'♩',2:'♪♪',4:'♬',8:'32nd',3:'triplet',6:'sext',5:'quint',7:'sept',12:'12-tup'};
+  return `${s.bpm} BPM · ${s.timeSigNum}/${s.timeSigDen}\n${subLabels[s.subdivision]||s.subdivision} · ${s.sound}`;
+}
+
+function saveToSlot(idx) {
+  const s = captureState();
+  const nameEl = document.getElementById(`preset-name-${idx}`);
+  s.name = nameEl ? nameEl.value.trim() || `Preset ${idx + 1}` : `Preset ${idx + 1}`;
+  presets[idx] = s;
+  savePresetsToStorage();
+  activePresetIdx = idx;
+  renderPresets();
+  const slot = document.querySelector(`.preset-slot[data-idx="${idx}"]`);
+  if (slot) { slot.classList.add('saving'); setTimeout(() => slot.classList.remove('saving'), 400); }
+}
+
+function loadFromSlot(idx) {
+  if (!presets[idx]) return;
+  activePresetIdx = idx;
+  applyPresetState(presets[idx]);
+  renderPresets();
+}
+
+function clearSlot(idx) {
+  presets[idx] = null;
+  if (activePresetIdx === idx) activePresetIdx = -1;
+  savePresetsToStorage();
+  renderPresets();
+}
+
+function renderPresets() {
+  const grid = document.getElementById('presetsGrid');
+  grid.innerHTML = '';
+
+  for (let i = 0; i < NUM_PRESETS; i++) {
+    const p = presets[i];
+    const isActive = activePresetIdx === i;
+
+    const slot = document.createElement('div');
+    slot.className = 'preset-slot' + (p ? ' filled' : '') + (isActive ? ' active-preset' : '');
+    slot.dataset.idx = i;
+    slot.title = p ? 'Tap to load · Hold to overwrite' : 'Hold to save current settings';
+
+    slot.innerHTML = `
+      <svg class="preset-hold-ring" viewBox="0 0 18 18" style="position:absolute;top:5px;right:5px;width:16px;height:16px;opacity:0;transition:opacity 0.1s">
+        <circle cx="9" cy="9" r="7" fill="none" stroke="var(--accent)" stroke-width="2"
+          stroke-dasharray="44" stroke-dashoffset="44" stroke-linecap="round"
+          transform="rotate(-90 9 9)" id="ring-${i}"/>
+      </svg>
+      <div class="preset-slot-num">SLOT ${i + 1}</div>
+    `;
+
+    if (p) {
+      const nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.className = 'preset-slot-name';
+      nameInput.id = `preset-name-${i}`;
+      nameInput.value = p.name || `Preset ${i + 1}`;
+      nameInput.maxLength = 16;
+      nameInput.placeholder = 'Name...';
+      nameInput.addEventListener('mousedown', e => e.stopPropagation());
+      nameInput.addEventListener('touchstart', e => e.stopPropagation(), {passive:true});
+      nameInput.addEventListener('change', () => {
+        if (presets[i]) { presets[i].name = nameInput.value.trim() || `Preset ${i+1}`; savePresetsToStorage(); }
+      });
+
+      const meta = document.createElement('div');
+      meta.className = 'preset-slot-meta';
+      meta.style.whiteSpace = 'pre';
+      meta.textContent = presetMeta(p);
+
+      const actions = document.createElement('div');
+      actions.className = 'preset-slot-actions';
+      actions.innerHTML = `<button class="preset-action-btn save-btn">↺ Save</button><button class="preset-action-btn del-btn">✕</button>`;
+      actions.querySelector('.save-btn').addEventListener('click', e => { e.stopPropagation(); saveToSlot(i); });
+      actions.querySelector('.del-btn').addEventListener('click', e => { e.stopPropagation(); clearSlot(i); });
+
+      slot.appendChild(nameInput);
+      slot.appendChild(meta);
+      slot.appendChild(actions);
+    } else {
+      const empty = document.createElement('div');
+      empty.className = 'preset-slot-empty';
+      empty.textContent = 'hold to save';
+      slot.appendChild(empty);
+    }
+
+    // Interaction: tap = load, hold = save
+    let holdStart = null;
+    let animFrame = null;
+    const ring = () => document.getElementById(`ring-${i}`);
+    const ringEl = () => slot.querySelector('.preset-hold-ring');
+
+    const startHold = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+      holdStart = Date.now();
+      if (ringEl()) ringEl().style.opacity = '1';
+
+      const tick = () => {
+        if (holdStart === null) return;
+        const pct = Math.min((Date.now() - holdStart) / HOLD_MS, 1);
+        if (ring()) ring().style.strokeDashoffset = 44 * (1 - pct);
+        if (pct < 1) { animFrame = requestAnimationFrame(tick); }
+        else { saveToSlot(i); endHold(e); }
+      };
+      animFrame = requestAnimationFrame(tick);
+    };
+
+    const endHold = (e) => {
+      if (holdStart === null) return;
+      const elapsed = Date.now() - holdStart;
+      cancelAnimationFrame(animFrame);
+      if (ringEl()) { ringEl().style.opacity = '0'; }
+      if (ring()) ring().style.strokeDashoffset = 44;
+      if (elapsed < HOLD_MS && elapsed > 0 && presets[i]) loadFromSlot(i);
+      holdStart = null;
+    };
+
+    slot.addEventListener('mousedown', startHold);
+    slot.addEventListener('mouseup', endHold);
+    slot.addEventListener('mouseleave', endHold);
+    slot.addEventListener('touchstart', startHold, {passive:true});
+    slot.addEventListener('touchend', endHold);
+    slot.addEventListener('touchcancel', endHold);
+
+    grid.appendChild(slot);
+  }
+}
+
+// ─── SERVICE WORKER ──────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/TEMPOH/sw.js')
+      .then(reg => console.log('SW registered:', reg.scope))
+      .catch(err => console.log('SW failed:', err));
+  });
+}
+
 buildBeatPads();
 updateInfoBar();
 setBPM(120);
 initSettings();
+renderPresets();
 </script>
 </body>
 </html>
